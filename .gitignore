@@ -1,0 +1,23 @@
+# Ambientes virtuais
+venv/
+env/
+.env
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Logs e dados
+logs/
+data/
+exports/
+*.log
+
+# Base de dados do Chroma
+chroma_db/
+
+# Arquivos do sistema
+.DS_Store
+.vscode/
+*.swp

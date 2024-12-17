@@ -1,0 +1,38 @@
+[
+  {
+    "timestamp": "2024-12-17T11:03:21.349829",
+    "question": "Como é feito o processo de avaliação e controle de qualidade no projeto?",
+    "answer": " O processo de avaliação e controle de qualidade no projeto é feito de acordo com as seguintes etapas, conforme definido nos documentos fornecidos:\n\n1. Após a inserção de todos os documentos e informações do Plano de Ação pelo Organismo Solidário Comunitário (OSC), a proposta atinge o status “em avaliação” na Plataforma Eletrônica do Sistema de Gestão de Parcerias da Prefeitura Municipal de Florianópolis.\n\n2. A OSC pode elaborar uma Matriz de Avaliação, opcionalmente, para verificar o cumprimento dos objetivos propostos para o projeto. Essa matriz de avaliação é útil dependendo do tipo de projeto a ser executado e das ações que serão realizadas.\n\n3. Somente as propostas cadastradas e com status “em avaliação” na plataforma eletrônica até o prazo limite de envio das propostas pelas OSCs serão avaliadas.\n\n4. Na categoria Recursos Indiretos, discriminam-se os custos que não podem ser relacionados diretamente às atividades propostas, mas são essenciais para sua execução. Esses custos podem ser considerados como custos da OSC, que incidem na execução de mais de um projeto por ela executado e são objeto de rateio, como por exemplo: material de expediente, energia elétrica, água, telefone, etc.\n\n5. Na categoria Equipe, o histórico da conversa não fornece informações suficientes para responder sobre a equipe e seu papel no processo de avaliação e controle de qualidade do projeto.",
+    "sources": [
+      "Fonte não especificada",
+      "Fonte não especificada",
+      "Fonte não especificada",
+      "Fonte não especificada"
+    ],
+    "feedback": 3
+  },
+  {
+    "timestamp": "2024-12-17T11:21:26.559953",
+    "question": "elenque os requisitos basicos para ser abordados no projeto, o que pode, o que nao pode, e o que é opcional",
+    "answer": " As exigências básicas que devem ser abordadas no projeto, conforme definido nos documentos fornecidos, incluem:\n\n1. Resumo do projeto (II-a): Apresentar um resumo que contenha a essência do Plano de Trabalho / proposta de projeto apresentado, descrevendo suas características.\n\n2. Período do Projeto (II-b): Apresentar data de início e data final da execução do projeto.\n\n3. Descrição do projeto (II-c): Apresentar de forma clara e resumida uma breve descrição do que será realizado com a execução do projeto proposto.\n\n4. Eixo e Módulo (II-d): Selecionar em qual dos Eixos, e o respectivo Módulo, estabelecidos pelo item 2.2. deste Edital a proposta se enquadra.\n\n5. Tipo de projeto (II-e): Informar qual o objeto de atuação de seu projeto, dentre as opções referentes ao respectivo Eixo e Módulo a que sua proposta se enquadra.\n\n6. Programa (II-f): Informar o Programa desenvolvido pela Organização da Sociedade Civil, com inscrição válida no CMDCA de Florianópolis, ao qual a proposta se enquadra.\n\n7. Responsável pelo projeto (II-g): Apresentar informações sobre o responsável pelo projeto e sua equipe, bem como seu papel no processo de avaliação e controle de qualidade do projeto.\n\nAlém dessas exigências básicas, é possível elaborar uma Matriz de Avaliação, opcionalmente, para verificar o cumprimento dos objetivos propostos para o projeto (II-2). Por outro lado, na categoria Recursos Indiretos, discriminam-se os custos que não podem ser relacionados diretamente às atividades propostas, mas são essenciais para sua execução (III-4).\n\nEm caso de incerteza ou dúvidas sobre as exigências, é importante consultar os documentos fornecidos e a equipe responsável pelo processo.",
+    "sources": [
+      "Fonte não especificada",
+      "Fonte não especificada",
+      "Fonte não especificada",
+      "Fonte não especificada"
+    ],
+    "feedback": 2
+  },
+  {
+    "timestamp": "2024-12-17T12:54:29.258829",
+    "question": "quanto aos prazos, o que está delimitado nos editais?",
+    "answer": "1. As datas especificadas nos edictais são as seguintes:\n\n    - Prazo limite para envio das propostas pelas Organizações da Sociedade Civil (OSCs): 28 de fevereiro de 2023, às 17h.\n\n   Fonte: https://www.cmdcaflorianopolis.org.br/edital-de-convocatoria-de-projetos-2023/\n\n    - Data de início e data final da execução do projeto serão definidos pelo responsável pelo projeto, dentro dos limites estabelecidos no edital.\n\n   Fonte: https://www.cmdcaflorianopolis.org.br/edital-de-convocatoria-de-projetos-2023/#II-b",
+    "sources": [
+      "Fonte não especificada",
+      "Fonte não especificada",
+      "Fonte não especificada",
+      "Fonte não especificada"
+    ],
+    "feedback": 5
+  }
+]
