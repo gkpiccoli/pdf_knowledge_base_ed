@@ -3,36 +3,12 @@ from langchain_ollama import OllamaEmbeddings, ChatOllama
 from langchain_community.vectorstores import Chroma
 from langchain.chains import ConversationalRetrievalChain
 from langchain.prompts import PromptTemplate
-from colorama import Fore, Style, init
 from datetime import datetime
 import logging
 import json
 import os
 
-# Cria diretórios necessários antes de qualquer outra operação
-def create_directories():
-    """Cria diretórios necessários se não existirem"""
-    directories = ['logs', 'data', 'exports']
-    for directory in directories:
-        os.makedirs(directory, exist_ok=True)
-
-# Cria os diretórios antes de configurar o logging
-create_directories()
-
-# Inicializa colorama para cores no terminal
-init()
-
-# Configuração do logging
-logging.basicConfig(
-    filename=os.path.join('logs', f'qa_system_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'),
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-
-# Cache para respostas frequentes
-response_cache = {}
-
-# Template do prompt melhorado
+# Template do prompt
 template = """
 Você é um assistente especializado em responder perguntas com base nos documentos fornecidos.
 Seu objetivo é fornecer respostas precisas, claras e bem fundamentadas.
@@ -59,55 +35,22 @@ PROMPT = PromptTemplate(
     template=template
 )
 
-class ConversationManager:
-    def __init__(self):
-        self.conversations = []
-        
-    def add_interaction(self, question, answer, sources, feedback):
-        self.conversations.append({
-            'timestamp': datetime.now().isoformat(),
-            'question': question,
-            'answer': answer,
-            'sources': sources,
-            'feedback': feedback
-        })
-    
-    def export_conversations(self):
-        filename = f'conversations_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
-        with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(self.conversations, f, ensure_ascii=False, indent=2)
-        return filename
-
 def create_directories():
     """Cria diretórios necessários se não existirem"""
-    directories = ['logs', 'data', 'exports']
+    directories = ['logs', 'data', 'exports', 'extracted_texts']
     for directory in directories:
-        if not os.path.exists(directory):
-            os.makedirs(directory)
+        os.makedirs(directory, exist_ok=True)
 
-def print_colored(text, color, end='\n'):
-    """Imprime texto colorido"""
-    print(f"{color}{text}{Style.RESET_ALL}", end=end)
-
-def get_feedback():
-    """Obtém feedback detalhado do usuário"""
-    print_colored("\nPor favor, avalie a resposta:", Fore.YELLOW)
-    print("1 - Excelente")
-    print("2 - Boa")
-    print("3 - Regular")
-    print("4 - Ruim")
-    print("5 - Muito ruim")
-    
-    while True:
-        try:
-            rating = int(input("Avaliação (1-5): "))
-            if 1 <= rating <= 5:
-                return rating
-            print("Por favor, digite um número entre 1 e 5")
-        except ValueError:
-            print("Por favor, digite um número válido")
+def setup_logging():
+    """Configura o sistema de logging"""
+    logging.basicConfig(
+        filename=os.path.join('logs', f'qa_system_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'),
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
 
 def load_documents(directory):
+    """Carrega documentos do diretório especificado"""
     documents = []
     try:
         for filename in os.listdir(directory):
@@ -120,21 +63,18 @@ def load_documents(directory):
         raise
     return documents
 
-def create_qa_system():
+def setup_qa_chain():
+    """Configura e retorna a chain de QA"""
     try:
-        print_colored("Iniciando processamento...", Fore.CYAN)
-        logging.info("Iniciando processamento do sistema")
-
-        print_colored("1. Criando chunks dos documentos...", Fore.CYAN)
+        # Carrega e processa documentos
         documents = load_documents("extracted_texts")
         text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=500,  # Reduzido para chunks menores
+            chunk_size=500,
             chunk_overlap=100
         )
         chunks = text_splitter.create_documents(documents)
-        print_colored(f"   Criados {len(chunks)} chunks\n", Fore.GREEN)
 
-        print_colored("2. Criando base vetorial...", Fore.CYAN)
+        # Configura embeddings e vectorstore
         embeddings = OllamaEmbeddings(
             model="nomic-embed-text",
             base_url="http://localhost:11434"
@@ -145,10 +85,10 @@ def create_qa_system():
             persist_directory="data/chroma_db"
         )
 
-        print_colored("\n3. Configurando modelo de chat...", Fore.CYAN)
+        # Configura o modelo e a chain
         llm = ChatOllama(
             model="mistral",
-            temperature=0.3  # Reduzido para respostas mais precisas
+            temperature=0.3
         )
 
         qa_chain = ConversationalRetrievalChain.from_llm(
@@ -165,83 +105,37 @@ def create_qa_system():
         logging.error(f"Erro ao criar sistema: {str(e)}")
         raise
 
-def main():
-    try:
-        create_directories()
-        qa_chain = create_qa_system()
-        conversation_manager = ConversationManager()
-        
-        print_colored("\nSistema pronto! Digite suas perguntas (ou comandos especiais):", Fore.GREEN)
-        print_colored("Comandos disponíveis:", Fore.YELLOW)
-        print("- 'sair': Encerra o sistema")
-        print("- 'exportar': Exporta histórico de conversas")
-        print("- 'ajuda': Mostra comandos disponíveis")
-        
-        chat_history = []
+def process_feedback(question: str, answer: str, rating: int):
+    """Processa e salva o feedback do usuário"""
+    feedback_data = {
+        'timestamp': datetime.now().isoformat(),
+        'question': question,
+        'answer': answer,
+        'rating': rating
+    }
+    
+    feedback_file = os.path.join('data', 'feedback.json')
+    
+    # Carrega feedbacks existentes ou cria lista vazia
+    if os.path.exists(feedback_file):
+        with open(feedback_file, 'r', encoding='utf-8') as f:
+            feedbacks = json.load(f)
+    else:
+        feedbacks = []
+    
+    # Adiciona novo feedback e salva
+    feedbacks.append(feedback_data)
+    with open(feedback_file, 'w', encoding='utf-8') as f:
+        json.dump(feedbacks, f, ensure_ascii=False, indent=2)
 
-        while True:
-            try:
-                question = input(f"\n{Fore.GREEN}Pergunta: {Style.RESET_ALL}").strip()
-                
-                if question.lower() == 'sair':
-                    break
-                elif question.lower() == 'exportar':
-                    filename = conversation_manager.export_conversations()
-                    print_colored(f"\nConversas exportadas para: {filename}", Fore.GREEN)
-                    continue
-                elif question.lower() == 'ajuda':
-                    print_colored("\nComandos disponíveis:", Fore.YELLOW)
-                    print("- 'sair': Encerra o sistema")
-                    print("- 'exportar': Exporta histórico de conversas")
-                    print("- 'ajuda': Mostra comandos disponíveis")
-                    continue
-                
-                if not question:
-                    continue
-                
-                # Verifica cache
-                cache_key = (question, str(chat_history))
-                if cache_key in response_cache:
-                    print_colored("\n[Resposta do cache]", Fore.YELLOW)
-                    result = response_cache[cache_key]
-                else:
-                    logging.info(f"Pergunta recebida: {question}")
-                    result = qa_chain.invoke({
-                        "question": question,
-                        "chat_history": chat_history
-                    })
-                    response_cache[cache_key] = result
-                
-                answer = result["answer"]
-                sources = [doc.metadata.get("source", "Fonte não especificada") 
-                          for doc in result["source_documents"]]
-                
-                print_colored("\nResposta:", Fore.BLUE)
-                print(answer)
-                
-                print_colored("\nFontes:", Fore.YELLOW)
-                for source in sources:
-                    print("-", source)
-                
-                feedback = get_feedback()
-                conversation_manager.add_interaction(question, answer, sources, feedback)
-                
-                chat_history.append((question, answer))
-                logging.info(f"Resposta fornecida com feedback {feedback}")
-
-            except Exception as e:
-                logging.error(f"Erro durante a interação: {str(e)}")
-                print_colored(f"\nOcorreu um erro: {str(e)}", Fore.RED)
-                print("Você pode continuar fazendo perguntas.")
-
-    except Exception as e:
-        logging.error(f"Erro fatal: {str(e)}")
-        print_colored(f"\nErro fatal: {str(e)}", Fore.RED)
-    finally:
-        print_colored("\nExportando conversas finais...", Fore.YELLOW)
-        conversation_manager.export_conversations()
-        print_colored("Sistema encerrado", Fore.RED)
-        logging.info("Sistema encerrado")
-
-if __name__ == "__main__":
-    main()
+def export_chat_history(chat_history, filepath):
+    """Exporta o histórico do chat para um arquivo"""
+    export_data = {
+        'timestamp': datetime.now().isoformat(),
+        'conversations': [
+            {'question': q, 'answer': a} for q, a in chat_history
+        ]
+    }
+    
+    with open(filepath, 'w', encoding='utf-8') as f:
+        json.dump(export_data, f, ensure_ascii=False, indent=2)
