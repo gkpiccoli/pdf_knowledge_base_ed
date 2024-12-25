@@ -15,6 +15,8 @@ Sistema de perguntas e respostas baseado em documentos PDF usando LangChain e Ol
 git clone [URL_DO_SEU_REPOSITORIO]
 cd pdf_knowledge_base
 
+sudo apt install -y build-essential git curl wget python3-pip
+
 ## Crie um ambiente virtual
 
 python -m venv venv
