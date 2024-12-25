@@ -1,19 +1,35 @@
 import streamlit as st
-import os
-import time
 import plotly.express as px
-import plotly.graph_objects as go
 from datetime import datetime
 import PyPDF2
 import io
 import pandas as pd
-from qa_system import create_directories, setup_qa_chain, process_feedback, export_chat_history
+from qa_system import QASystem
+from pathlib import Path
+from typing import List, Tuple
 
-# Configurações iniciais
-os.environ['POSTHOG_API_KEY'] = ''
-st.set_page_config(page_title="Sistema Avançado de QA", layout="wide", page_icon="📚")
+# Configurações de diretórios usando Path
+DIRECTORIES = {
+    'PDF_DIR': Path('pdfs'),
+    'EXTRACTED_DIR': Path('extracted_texts'),
+    'DATA_DIR': Path('data'),
+    'LOGS_DIR': Path('logs'),
+    'EXPORTS_DIR': Path('exports')
+}
 
-# Estilo CSS personalizado
+# Configurações iniciais do Streamlit
+st.set_page_config(
+    page_title="Sistema Avançado de QA",
+    layout="wide",
+    page_icon="📚",
+    menu_items={
+        'Get Help': 'https://github.com/seu-repositorio',
+        'Report a bug': "https://github.com/seu-repositorio/issues",
+        'About': "# Sistema Avançado de QA\nVersão 1.0"
+    }
+)
+
+# Estilo CSS aprimorado
 st.markdown("""
 <style>
     .main {padding: 2rem;}
@@ -31,94 +47,210 @@ st.markdown("""
         border-radius: 0.5rem;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
+    .pdf-list {
+        background-color: #f8f9fa;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin: 1rem 0;
+    }
+    .stProgress > div > div > div > div {
+        background-color: #2ecc71;
+    }
+    .chat-message {
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin: 0.5rem 0;
+    }
+    .user-message {
+        background-color: #e3f2fd;
+    }
+    .assistant-message {
+        background-color: #f5f5f5;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-def process_uploaded_file(uploaded_file):
+def create_required_directories() -> None:
+    """Cria todos os diretórios necessários"""
+    for directory in DIRECTORIES.values():
+        directory.mkdir(parents=True, exist_ok=True)
+
+def get_pdf_files() -> List[Path]:
+    """Retorna lista de arquivos PDF no diretório"""
+    return list(DIRECTORIES['PDF_DIR'].glob('*.pdf'))
+
+def process_uploaded_file(uploaded_file) -> Tuple[bool, str]:
+    """Processa arquivo PDF enviado"""
     try:
-        if not os.path.exists("documents"):
-            os.makedirs("documents")
-        
         if uploaded_file.type == "application/pdf":
-            file_path = os.path.join("documents", uploaded_file.name)
-            with open(file_path, "wb") as f:
-                f.write(uploaded_file.getvalue())
+            # Salvar PDF
+            pdf_path = DIRECTORIES['PDF_DIR'] / uploaded_file.name
+            pdf_path.write_bytes(uploaded_file.getvalue())
             
-            # Extrair texto para indexação
+            # Extrair texto
             pdf_reader = PyPDF2.PdfReader(io.BytesIO(uploaded_file.getvalue()))
             text = ""
-            for page in pdf_reader.pages:
+            
+            # Adicionar barra de progresso
+            progress_bar = st.progress(0)
+            total_pages = len(pdf_reader.pages)
+            
+            for idx, page in enumerate(pdf_reader.pages):
                 text += page.extract_text() + "\n"
+                progress_bar.progress((idx + 1) / total_pages)
             
             # Salvar texto extraído
-            text_path = os.path.join("extracted_texts", 
-                                   uploaded_file.name.replace('.pdf', '.txt'))
-            with open(text_path, "w", encoding="utf-8") as f:
-                f.write(text)
+            text_path = DIRECTORIES['EXTRACTED_DIR'] / f"{uploaded_file.name.replace('.pdf', '.txt')}"
+            text_path.write_text(text, encoding="utf-8")
             
+            progress_bar.empty()
             return True, f"Arquivo {uploaded_file.name} processado com sucesso!"
     except Exception as e:
         return False, f"Erro ao processar arquivo: {str(e)}"
 
-def initialize_system():
-    try:
-        with st.spinner('Inicializando o sistema...'):
-            create_directories()
-            qa_chain = setup_qa_chain()
-            return qa_chain
-    except Exception as e:
-        st.error(f"Erro na inicialização: {str(e)}")
-        return None
+def load_feedback_data() -> pd.DataFrame:
+    """Carrega dados de feedback do sistema"""
+    feedback_file = DIRECTORIES['DATA_DIR'] / 'feedback.json'
+    if feedback_file.exists():
+        try:
+            feedback_data = pd.read_json(feedback_file)
+            feedback_data['timestamp'] = pd.to_datetime(feedback_data['timestamp'])
+            return feedback_data
+        except Exception as e:
+            st.error(f"Erro ao carregar dados de feedback: {str(e)}")
+    return pd.DataFrame()
 
 def show_metrics_dashboard():
-    col1, col2, col3 = st.columns(3)
+    """Exibe o dashboard com métricas do sistema"""
+    st.header("📊 Dashboard do Sistema", divider="rainbow")
+
+    # Carregar dados
+    feedback_data = load_feedback_data()
+    pdf_files = get_pdf_files()
+
+    # Métricas principais
+    col1, col2, col3, col4 = st.columns(4)
     
-    # Métricas básicas
     with col1:
-        st.metric("📚 Total de Documentos", 
-                 len([f for f in os.listdir("documents") if f.endswith('.pdf')]))
+        st.metric("📚 Documentos", len(pdf_files))
+    
     with col2:
-        st.metric("❓ Total de Perguntas", 
-                 len(st.session_state.get('chat_history', [])))
+        total_questions = len(feedback_data) if not feedback_data.empty else 0
+        st.metric("❓ Perguntas", total_questions)
+    
     with col3:
-        st.metric("⭐ Média de Feedback", 
-                 f"{st.session_state.get('feedback_avg', 0):.1f}")
+        avg_rating = feedback_data['rating'].mean() if not feedback_data.empty else 0.0
+        st.metric("⭐ Média Feedback", f"{avg_rating:.1f}")
     
-    # Gráficos
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Gráfico de perguntas por dia
-        if st.session_state.get('chat_history'):
-            dates = [datetime.now().strftime("%Y-%m-%d") 
-                    for _ in st.session_state.chat_history]
-            df_questions = pd.DataFrame({'data': dates})
-            fig_questions = px.histogram(df_questions, x='data', 
-                                       title="Perguntas por Dia")
-            st.plotly_chart(fig_questions, use_container_width=True)
-    
-    with col2:
-        # Gráfico de feedback
-        if hasattr(st.session_state, 'feedback_history'):
-            feedback_data = pd.DataFrame(st.session_state.feedback_history)
-            fig_feedback = px.box(feedback_data, y='rating', 
-                                title="Distribuição do Feedback")
+    with col4:
+        total_pages = sum(len(PyPDF2.PdfReader(str(pdf)).pages) for pdf in pdf_files) if pdf_files else 0
+        st.metric("📄 Total Páginas", total_pages)
+
+    # Lista de documentos
+    with st.expander("📁 Documentos Disponíveis", expanded=True):
+        if pdf_files:
+            for pdf_file in pdf_files:
+                col1, col2, col3 = st.columns([3, 1, 1])
+                with col1:
+                    st.write(f"📄 {pdf_file.name}")
+                with col2:
+                    st.write(f"Tamanho: {pdf_file.stat().st_size / 1024:.1f} KB")
+                with col3:
+                    if st.button("🗑️ Remover", key=f"remove_{pdf_file.name}"):
+                        try:
+                            pdf_file.unlink()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Erro ao remover arquivo: {str(e)}")
+        else:
+            st.info("Nenhum documento PDF disponível.")
+
+    # Gráficos de feedback
+    if not feedback_data.empty:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            fig_feedback = px.box(
+                feedback_data,
+                y='rating',
+                title='📊 Distribuição das Avaliações'
+            )
             st.plotly_chart(fig_feedback, use_container_width=True)
+        
+        with col2:
+            fig_timeline = px.line(
+                feedback_data,
+                x='timestamp',
+                y='rating',
+                title='📈 Histórico de Avaliações'
+            )
+            st.plotly_chart(fig_timeline, use_container_width=True)
+
+def chat_interface():
+    """Interface de chat do sistema"""
+    st.header("💬 Chat Interativo", divider="rainbow")
+    
+    # Campo de entrada
+    if prompt := st.chat_input("Digite sua pergunta..."):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        try:
+            # Adicionar spinner durante o processamento
+            with st.spinner('Processando sua pergunta...'):
+                response = st.session_state.qa_system.process_query(prompt)
+            
+            st.session_state.messages.append({"role": "assistant", "content": response["answer"]})
+            
+            # Área de feedback
+            with st.expander("📝 Feedback"):
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    rating = st.slider("Avaliação:", 1, 5, 3)
+                    comment = st.text_area("Comentário (opcional):")
+                with col2:
+                    if st.button("Enviar"):
+                        st.session_state.qa_system.process_feedback(
+                            prompt,
+                            response["answer"],
+                            rating,
+                            comment
+                        )
+                        st.success("Feedback enviado!")
+            
+            # Exibir fontes
+            if "sources" in response and response["sources"]:
+                with st.expander("📚 Fontes"):
+                    for idx, source in enumerate(response["sources"], 1):
+                        st.markdown(f"**Fonte {idx}:**")
+                        st.markdown(f"```{source[:200]}...```")
+        
+        except Exception as e:
+            st.error(f"Erro: {str(e)}")
+
+    # Exibir histórico
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.write(message["content"])
 
 def main():
     # Inicialização
-    if 'system_initialized' not in st.session_state:
-        st.session_state.system_initialized = False
-        st.session_state.chat_history = []
-        st.session_state.feedback_history = []
-        st.session_state.feedback_avg = 0
+    create_required_directories()
     
+    if 'qa_system' not in st.session_state:
+        st.session_state.qa_system = QASystem()
+        st.session_state.messages = []
+
     # Sidebar
     with st.sidebar:
-        st.header("📁 Upload de Documentos")
-        uploaded_files = st.file_uploader("Carregar PDFs", 
-                                        type="pdf", 
-                                        accept_multiple_files=True)
+        st.header("⚙️ Configurações")
+        
+        # Upload de arquivos
+        st.subheader("📁 Upload de Documentos")
+        uploaded_files = st.file_uploader(
+            "Carregar PDFs",
+            type="pdf",
+            accept_multiple_files=True
+        )
         
         if uploaded_files:
             for uploaded_file in uploaded_files:
@@ -128,100 +260,40 @@ def main():
                 else:
                     st.error(message)
         
-        st.header("⚙️ Configurações")
-        model = st.selectbox("Modelo LLM", 
-                           ["mistral", "llama2", "codellama", "phi"])
-        temperature = st.slider("Temperatura", 0.0, 1.0, 0.3)
+        # Botões de controle
+        if st.button("🔄 Reiniciar Chat"):
+            st.session_state.messages = []
+            st.session_state.qa_system.clear_chat_history()
+            st.success("Chat reiniciado!")
         
-        if st.button("Reinicializar Sistema"):
-            st.session_state.system_initialized = False
-            st.rerun()
+        if st.button("💾 Exportar Histórico"):
+            filename = f"chat_history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            filepath = DIRECTORIES['EXPORTS_DIR'] / filename
+            st.session_state.qa_system.export_chat_history(str(filepath))
+            st.success(f"Histórico exportado: {filename}")
     
     # Área principal
-    st.title("📚 Sistema Avançado de QA")
+    tab1, tab2 = st.tabs(["💬 Chat", "📊 Dashboard"])
     
-    # Inicialização do sistema
-    if not st.session_state.system_initialized:
-        qa_chain = initialize_system()
-        if qa_chain:
-            st.session_state.qa_chain = qa_chain
-            st.session_state.system_initialized = True
-            st.rerun()
+    with tab1:
+        chat_interface()
     
-    # Dashboard
-    with st.expander("📊 Dashboard", expanded=True):
+    with tab2:
         show_metrics_dashboard()
-    
-    # Área de chat
-    st.header("💬 Chat")
-    
-    # Histórico de mensagens
-    for i, (question, answer) in enumerate(st.session_state.get('chat_history', [])):
-        with st.container():
-            st.info(f"Pergunta: {question}")
-            with st.expander("Ver resposta e fontes", expanded=True):
-                st.success("Resposta:")
-                st.write(answer)
-                
-                # Sistema de feedback
-                st.write("---")
-                st.write("📝 Avaliação")
-                
-                feedback_col1, feedback_col2 = st.columns(2)
-                with feedback_col1:
-                    quality = st.select_slider(
-                        "Qualidade da resposta",
-                        options=["Ruim", "Regular", "Bom", "Muito Bom", "Excelente"],
-                        key=f"quality_{i}"
-                    )
-                
-                with feedback_col2:
-                    feedback_text = st.text_area(
-                        "Comentários (opcional)",
-                        key=f"feedback_{i}",
-                        height=100
-                    )
-                
-                if st.button("Enviar Feedback", key=f"send_{i}"):
-                    feedback_data = {
-                        'question': question,
-                        'answer': answer,
-                        'quality': quality,
-                        'comment': feedback_text,
-                        'timestamp': datetime.now().isoformat()
-                    }
-                    process_feedback(feedback_data)
-                    st.success("Feedback registrado! Obrigado!")
-    
-    # Campo de pergunta
-    question = st.text_input("Digite sua pergunta:")
-    
-    if st.button("Enviar"):
-        if question:
-            with st.spinner("Processando..."):
-                try:
-                    result = st.session_state.qa_chain.invoke({
-                        "question": question,
-                        "chat_history": st.session_state.get('chat_history', [])
-                    })
-                    
-                    st.session_state.chat_history.append((question, result['answer']))
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro: {str(e)}")
-        else:
-            st.warning("Por favor, digite uma pergunta.")
-    
+
     # Footer
     st.markdown("---")
     st.markdown("""
-        💡 **Dicas:**
-        - Faça perguntas específicas para respostas mais precisas
-        - Use o feedback para nos ajudar a melhorar
-        - Explore o dashboard para ver estatísticas
-        
-        Desenvolvido com ❤️ usando LangChain e Streamlit
-    """)
+        <div style='text-align: center'>
+            <h4>💡 Dicas de Uso</h4>
+            <ul style='list-style-type: none'>
+                <li>✨ Faça perguntas específicas para respostas mais precisas</li>
+                <li>📝 Use o feedback para nos ajudar a melhorar</li>
+                <li>📊 Explore o dashboard para ver estatísticas</li>
+            </ul>
+            <p>Desenvolvido com ❤️ usando LangChain e Streamlit</p>
+        </div>
+    """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
