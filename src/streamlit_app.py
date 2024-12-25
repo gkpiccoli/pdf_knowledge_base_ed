@@ -1,23 +1,11 @@
 import streamlit as st
 import plotly.express as px
-from datetime import datetime
-import PyPDF2
-import io
 import pandas as pd
-from qa_system import QASystem
 from pathlib import Path
-from typing import List, Tuple
+from qa_system import QASystem
+import json
 
-# Configurações de diretórios usando Path
-DIRECTORIES = {
-    'PDF_DIR': Path('pdfs'),
-    'EXTRACTED_DIR': Path('extracted_texts'),
-    'DATA_DIR': Path('data'),
-    'LOGS_DIR': Path('logs'),
-    'EXPORTS_DIR': Path('exports')
-}
-
-# Configurações iniciais do Streamlit
+# Configuração da página
 st.set_page_config(
     page_title="Sistema Avançado de QA",
     layout="wide",
@@ -29,7 +17,7 @@ st.set_page_config(
     }
 )
 
-# Estilo CSS aprimorado
+# Estilo CSS personalizado
 st.markdown("""
 <style>
     .main {padding: 2rem;}
@@ -53,9 +41,6 @@ st.markdown("""
         border-radius: 0.5rem;
         margin: 1rem 0;
     }
-    .stProgress > div > div > div > div {
-        background-color: #2ecc71;
-    }
     .chat-message {
         padding: 1rem;
         border-radius: 0.5rem;
@@ -67,57 +52,33 @@ st.markdown("""
     .assistant-message {
         background-color: #f5f5f5;
     }
+    .stProgress > div > div > div > div {
+        background-color: #2ecc71;
+    }
+    .feedback-section {
+        border: 1px solid #ddd;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        margin-top: 1rem;
+    }
+    .source-section {
+        border-left: 3px solid #2ecc71;
+        padding-left: 1rem;
+        margin: 0.5rem 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-def create_required_directories() -> None:
-    """Cria todos os diretórios necessários"""
-    for directory in DIRECTORIES.values():
-        directory.mkdir(parents=True, exist_ok=True)
-
-def get_pdf_files() -> List[Path]:
-    """Retorna lista de arquivos PDF no diretório"""
-    return list(DIRECTORIES['PDF_DIR'].glob('*.pdf'))
-
-def process_uploaded_file(uploaded_file) -> Tuple[bool, str]:
-    """Processa arquivo PDF enviado"""
-    try:
-        if uploaded_file.type == "application/pdf":
-            # Salvar PDF
-            pdf_path = DIRECTORIES['PDF_DIR'] / uploaded_file.name
-            pdf_path.write_bytes(uploaded_file.getvalue())
-            
-            # Extrair texto
-            pdf_reader = PyPDF2.PdfReader(io.BytesIO(uploaded_file.getvalue()))
-            text = ""
-            
-            # Adicionar barra de progresso
-            progress_bar = st.progress(0)
-            total_pages = len(pdf_reader.pages)
-            
-            for idx, page in enumerate(pdf_reader.pages):
-                text += page.extract_text() + "\n"
-                progress_bar.progress((idx + 1) / total_pages)
-            
-            # Salvar texto extraído
-            text_path = DIRECTORIES['EXTRACTED_DIR'] / f"{uploaded_file.name.replace('.pdf', '.txt')}"
-            text_path.write_text(text, encoding="utf-8")
-            
-            progress_bar.empty()
-            return True, f"Arquivo {uploaded_file.name} processado com sucesso!"
-    except Exception as e:
-        return False, f"Erro ao processar arquivo: {str(e)}"
-
-def load_feedback_data() -> pd.DataFrame:
+def load_feedback_data():
     """Carrega dados de feedback do sistema"""
-    feedback_file = DIRECTORIES['DATA_DIR'] / 'feedback.json'
-    if feedback_file.exists():
-        try:
-            feedback_data = pd.read_json(feedback_file)
-            feedback_data['timestamp'] = pd.to_datetime(feedback_data['timestamp'])
-            return feedback_data
-        except Exception as e:
-            st.error(f"Erro ao carregar dados de feedback: {str(e)}")
+    try:
+        feedback_file = Path('data/feedback.json')
+        if feedback_file.exists():
+            with open(feedback_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return pd.DataFrame(data)
+    except Exception as e:
+        st.error(f"Erro ao carregar dados de feedback: {str(e)}")
     return pd.DataFrame()
 
 def show_metrics_dashboard():
@@ -126,7 +87,7 @@ def show_metrics_dashboard():
 
     # Carregar dados
     feedback_data = load_feedback_data()
-    pdf_files = get_pdf_files()
+    pdf_files = list(Path('pdfs').glob('*.pdf'))
 
     # Métricas principais
     col1, col2, col3, col4 = st.columns(4)
@@ -143,8 +104,12 @@ def show_metrics_dashboard():
         st.metric("⭐ Média Feedback", f"{avg_rating:.1f}")
     
     with col4:
-        total_pages = sum(len(PyPDF2.PdfReader(str(pdf)).pages) for pdf in pdf_files) if pdf_files else 0
-        st.metric("📄 Total Páginas", total_pages)
+        if pdf_files:
+            import PyPDF2
+            total_pages = sum(len(PyPDF2.PdfReader(str(pdf)).pages) for pdf in pdf_files)
+            st.metric("📄 Total Páginas", total_pages)
+        else:
+            st.metric("📄 Total Páginas", 0)
 
     # Lista de documentos
     with st.expander("📁 Documentos Disponíveis", expanded=True):
@@ -156,14 +121,14 @@ def show_metrics_dashboard():
                 with col2:
                     st.write(f"Tamanho: {pdf_file.stat().st_size / 1024:.1f} KB")
                 with col3:
-                    if st.button("🗑️ Remover", key=f"remove_{pdf_file.name}"):
+                    if st.button("🗑️", key=f"remove_{pdf_file.name}"):
                         try:
                             pdf_file.unlink()
                             st.rerun()
                         except Exception as e:
                             st.error(f"Erro ao remover arquivo: {str(e)}")
         else:
-            st.info("Nenhum documento PDF disponível.")
+            st.info("Nenhum documento PDF disponível na pasta 'pdfs'.")
 
     # Gráficos de feedback
     if not feedback_data.empty:
@@ -178,6 +143,7 @@ def show_metrics_dashboard():
             st.plotly_chart(fig_feedback, use_container_width=True)
         
         with col2:
+            feedback_data['timestamp'] = pd.to_datetime(feedback_data['timestamp'])
             fig_timeline = px.line(
                 feedback_data,
                 x='timestamp',
@@ -186,97 +152,112 @@ def show_metrics_dashboard():
             )
             st.plotly_chart(fig_timeline, use_container_width=True)
 
-def chat_interface():
-    """Interface de chat do sistema"""
-    st.header("💬 Chat Interativo", divider="rainbow")
-    
-    # Campo de entrada
-    if prompt := st.chat_input("Digite sua pergunta..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        
-        try:
-            # Adicionar spinner durante o processamento
-            with st.spinner('Processando sua pergunta...'):
-                response = st.session_state.qa_system.process_query(prompt)
-            
-            st.session_state.messages.append({"role": "assistant", "content": response["answer"]})
-            
-            # Área de feedback
-            with st.expander("📝 Feedback"):
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    rating = st.slider("Avaliação:", 1, 5, 3)
-                    comment = st.text_area("Comentário (opcional):")
-                with col2:
-                    if st.button("Enviar"):
-                        st.session_state.qa_system.process_feedback(
-                            prompt,
-                            response["answer"],
-                            rating,
-                            comment
-                        )
-                        st.success("Feedback enviado!")
-            
-            # Exibir fontes
-            if "sources" in response and response["sources"]:
-                with st.expander("📚 Fontes"):
-                    for idx, source in enumerate(response["sources"], 1):
-                        st.markdown(f"**Fonte {idx}:**")
-                        st.markdown(f"```{source[:200]}...```")
-        
-        except Exception as e:
-            st.error(f"Erro: {str(e)}")
-
-    # Exibir histórico
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.write(message["content"])
-
-def main():
-    # Inicialização
-    create_required_directories()
-    
+def initialize_session_state():
+    """Inicializa o estado da sessão"""
     if 'qa_system' not in st.session_state:
         st.session_state.qa_system = QASystem()
+    if 'messages' not in st.session_state:
         st.session_state.messages = []
+    if 'current_model' not in st.session_state:
+        st.session_state.current_model = "mistral:7b-instruct"
+
+def main():
+    initialize_session_state()
 
     # Sidebar
     with st.sidebar:
         st.header("⚙️ Configurações")
         
-        # Upload de arquivos
-        st.subheader("📁 Upload de Documentos")
-        uploaded_files = st.file_uploader(
-            "Carregar PDFs",
-            type="pdf",
-            accept_multiple_files=True
+        # Configurações do modelo
+        st.subheader("🤖 Configurações do Modelo")
+        st.slider(
+            "Temperatura",
+            min_value=0.0,
+            max_value=1.0,
+            value=0.3,
+            step=0.1,
+            help="Controla a criatividade das respostas"
         )
         
-        if uploaded_files:
-            for uploaded_file in uploaded_files:
-                success, message = process_uploaded_file(uploaded_file)
-                if success:
-                    st.success(message)
-                else:
-                    st.error(message)
+        st.session_state.k_documents = st.slider(
+            "Número de documentos para contexto",
+            min_value=2,
+            max_value=10,
+            value=6,
+            help="Quantidade de documentos usados para gerar resposta"
+        )
         
         # Botões de controle
-        if st.button("🔄 Reiniciar Chat"):
+        st.subheader("🔄 Controles")
+        if st.button("Reindexar Documentos"):
+            with st.spinner("Reindexando documentos..."):
+                st.session_state.qa_system.reindex_documents()
+            st.success("Base de conhecimento atualizada!")
+        
+        if st.button("Limpar Chat"):
             st.session_state.messages = []
             st.session_state.qa_system.clear_chat_history()
             st.success("Chat reiniciado!")
         
-        if st.button("💾 Exportar Histórico"):
-            filename = f"chat_history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-            filepath = DIRECTORIES['EXPORTS_DIR'] / filename
-            st.session_state.qa_system.export_chat_history(str(filepath))
-            st.success(f"Histórico exportado: {filename}")
-    
+        if st.button("Exportar Histórico"):
+            filepath = st.session_state.qa_system.export_chat_history()
+            st.success(f"Histórico exportado para: {filepath}")
+
     # Área principal
     tab1, tab2 = st.tabs(["💬 Chat", "📊 Dashboard"])
     
     with tab1:
-        chat_interface()
+        st.header("💬 Chat Interativo")
+        
+        # Exibir mensagens anteriores
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.write(message["content"])
+        
+        # Campo de entrada
+        if prompt := st.chat_input("Digite sua pergunta..."):
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.write(prompt)
+            
+            try:
+                with st.spinner("Processando..."):
+                    response = st.session_state.qa_system.process_query(prompt)
+                
+                with st.chat_message("assistant"):
+                    st.write(response["answer"])
+                    st.session_state.messages.append({"role": "assistant", "content": response["answer"]})
+                    
+                    # Exibir fontes
+                    if response.get("sources"):
+                        with st.expander("📚 Fontes Utilizadas"):
+                            for idx, source in enumerate(response["sources"], 1):
+                                st.markdown(f"""
+                                <div class="source-section">
+                                    <strong>Fonte {idx}:</strong> {source['source']}<br>
+                                    <small>{source['created_at']}</small><br>
+                                    <code>{source['content'][:200]}...</code>
+                                </div>
+                                """, unsafe_allow_html=True)
+                
+                # Área de feedback
+                with st.expander("📝 Fornecer Feedback"):
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        rating = st.slider("Avalie a resposta:", 1, 5, 3)
+                        comment = st.text_area("Comentário (opcional):")
+                    with col2:
+                        if st.button("Enviar Feedback"):
+                            st.session_state.qa_system.process_feedback(
+                                prompt,
+                                response["answer"],
+                                rating,
+                                comment
+                            )
+                            st.success("Feedback enviado com sucesso!")
+            
+            except Exception as e:
+                st.error(f"Erro ao processar pergunta: {str(e)}")
     
     with tab2:
         show_metrics_dashboard()
