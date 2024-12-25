@@ -1,6 +1,6 @@
-Vou ajudar você a criar um README.md mais completo e organizado, incluindo as instruções para instalação dos modelos LLM:
 
-```markdown
+
+
 # PDF Knowledge Base QA System
 
 Sistema de perguntas e respostas baseado em documentos PDF com processamento de linguagem natural usando LangChain e Ollama.
